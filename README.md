@@ -2,7 +2,7 @@
 
 This repository contains the Stata `Analysis.do` file used to generate all tables and figures reported in the manuscript:
 
-**"Managerial Attention to Climate Risk and Corporate Greenwashing in China"**
+**"Managerial Attention on Climate Risk and Greenwashing Mitigation - The Mediating Role of Green Innovation: Walk the Talk or Just Talk?"**
 
 ---
 
