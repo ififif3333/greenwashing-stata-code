@@ -18,7 +18,7 @@ reg GB MAC IC GTI11 GTI22 firm_size TOP1 Indep Board Dual Opinion
 asdoc vif, dec(3)
 *------------------------------------------------------------------------------*
 
-*****************************Part II: Regression*******************************
+*****************************Part II: Baseline Regression*******************************
 *Baseline regression
 *add fixed effects， by year, province, industry, year*province, year*industry 
 encode Province, generate(province_num)
@@ -27,7 +27,6 @@ encode City, generate(city_num)
 encode Industry2, generate(industry_num)
 gen industry_first_num = substr(indcode, 1, 1)
 encode industry_first_num, gen(industry_number)
-
 
 reg GB MAC firm_size TOP1 Indep Board Dual Opinion,r
 est store a1
@@ -46,33 +45,6 @@ est store a4
 *save results in word files
 outreg2 [a1 a2 a3 a4] using baseline_regression.doc, replace tstat bdec(4) tdec(4) keep(GB MAC firm_size TOP1 Indep Board Dual Opinion) addtext(Year, YES, Province, YES, Industry, YES, Year*Province, YES, Year*Industry, YES)
 *------------------------------------------------------------------------------*
-**limit the sample date from year2012 to year 2019
-
-reg GB MAC firm_size TOP1 Indep Board Dual Opinion ///
-    if inrange(year, 2012, 2019), r
-est store a1_firmsize
-
-reghdfe GB MAC firm_size TOP1 Indep Board Dual Opinion ///
-    if inrange(year, 2012, 2019), ///
-    absorb(year province_num industry_num) vce(cluster id)
-est store a2_firmsize
-
-reghdfe GB MAC firm_size TOP1 Indep Board Dual Opinion ///
-    if inrange(year, 2012, 2019), ///
-    absorb(year province_num industry_num year#industry_num) vce(cluster id)
-est store a3_firmsize
-
-reghdfe GB MAC firm_size TOP1 Indep Board Dual Opinion ///
-    if inrange(year, 2012, 2019), ///
-    absorb(year province_num industry_num year#province_num year#industry_num) vce(cluster id)
-est store a4_firmsize
-
-outreg2 [a1_firmsize a2_firmsize a3_firmsize a4_firmsize] using baseline_regression_20122019.doc, replace ///
-    tstat bdec(4) tdec(4) ///
-    keep(GB MAC firm_size TOP1 Indep Board Dual Opinion) ///
-    addtext(Year FE, YES, Province FE, YES, Industry FE, YES, Year*Province FE, YES, Year*Industry FE, YES)
-*------------------------------------------------------------------------------*
-
 ******************************Part III: Causal Mediation*************************
 ***mediation effect
 *MAC's direct impact on GB 
@@ -90,6 +62,7 @@ est store r3
 *MAC on GTI22（green utility patent）
 reghdfe GTI22 MAC firm_size TOP1 Indep Board Dual Opinion ,absorb(year province_num industry_num year#province_num year#industry_num) vce(cluster id)
 est store r4
+
 *GTI22（green utility patent) on GB，control for MAC
 reghdfe GB GTI22 MAC firm_size TOP1 Indep Board Dual Opinion ,absorb(year province_num industry_num year#province_num year#industry_num) vce(cluster id)
 est store r5
@@ -99,6 +72,7 @@ outreg2 [r1 r2 r3 r4 r5] using mediation_effect.doc, replace tstat bdec(4) tdec(
     addtext(Year FE, YES, Province FE, YES, Industry FE, YES, Year*Province FE, YES, Year*Industry FE, YES)
 
 *https://www.trentonmize.com/software/sgmediation2
+*for GTI11 - green invention patent
 bootstrap r(ind_eff) r(dir_eff), reps(1000): sgmediation2 GB, mv(MAC) iv(GTI11) cv(firm_size TOP1 Indep Board Dual Opinion) 
 estat bootstrap, percentile bc
 
@@ -111,19 +85,26 @@ di "直接效应 c' = "_b[_bs_2]
 *proportion of mediation effect ab/c
 di "中介效应占比ab/c = "_b[_bs_1]/(_b[_bs_1]+_b[_bs_2])  
 
+*for GTI22 - green utility patent
 bootstrap r(ind_eff) r(dir_eff), reps(1000): sgmediation2 GB, mv(MAC) iv(GTI22) cv(firm_size TOP1 Indep Board Dual Opinion) 
 estat bootstrap, percentile bc
 
+*Indirect effect 
 di "中介（间接）效应 ab = "_b[_bs_1]  
 
+*Direct effect
 di "直接效应 c' = "_b[_bs_2]   
 
+*proportion of mediation effect ab/c
 di "中介效应占比ab/c = "_b[_bs_1]/(_b[_bs_1]+_b[_bs_2])
-
-
 *------------------------------------------------------------------------------*
+
 ********************************Part IV:Moderating Effect************************
 *调节
+*IC is the internal control index 
+*strategy (MAC_SL), reporting reliability (MAC_RR)
+*operational efficiency (MAC_OL), and compliance (MAC_CC)
+
 center MAC IC SL RR OL CC IS
 gen MAC_IC=c_MAC*c_IC
 gen MAC_SL=c_MAC*c_SL
@@ -163,30 +144,9 @@ preserve
 drop if year == 2016
 reghdfe GB MAC firm_size TOP1 Indep Board Dual Opinion, absorb(year province_num industry_num year#province_num year#industry_num) vce(cluster id)
 est store b4
-* 导出 b4 的结果到 Word 文档
+* export the results to word file
 outreg2 [b4] using robustness_2.doc, replace tstat bdec(4) tdec(4) keep(GB MAC firm_size TOP1 Indep Board Dual Opinion) addtext(Year, YES, Province, YES, Industry, YES, Year*Province, YES, Year*Industry, YES)
 restore
-*------------------------------------------------------------------------------*
-
-*3.robustness check - North Region vs. South Region
-* 创建南北地区虚拟变量
-gen north = 0
-* 将北方省份标记为 1
-replace north = 1 if inlist(Province, "北京市", "天津市", "河北省", "山西省", "内蒙古自治区")
-replace north = 1 if inlist(Province, "辽宁省", "吉林省", "黑龙江省", "山东省", "河南省")
-replace north = 1 if inlist(Province, "陕西省", "甘肃省", "青海省", "宁夏回族自治区", "新疆维吾尔自治区")
-
-* Alternative approach with fewer fixed effects
-* 北方地区
-reg GB MAC firm_size TOP1 Indep Board Dual Opinion i.year i.province_num i.industry_num if north == 1, vce(cluster id)
-est store north
-
-* 南方地区
-reg GB MAC firm_size TOP1 Indep Board Dual Opinion i.year i.province_num i.industry_num if north == 0, vce(cluster id)
-est store south
-
-* 导出结果到 Word 文档
-outreg2 [north south] using north_south_robust.doc, replace tstat bdec(4) tdec(4) keep(GB MAC firm_size TOP1 Indep Board Dual Opinion) addtext(Year, YES, Province, YES, Industry, YES)
 *------------------------------------------------------------------------------*
 *3.robustness check - 11 coastal provinces
 
@@ -216,9 +176,35 @@ drop if inlist(Province, "北京市", "天津市", "上海市", "重庆市")  //
 reghdfe GB MAC firm_size TOP1 Indep Board Dual Opinion, absorb(year province_num industry_num year#province_num year#industry_num) vce(cluster id)
 est store exclude_municipalities
 
-* 导出结果到 Word 文档
+* export results to the word file
 outreg2 [exclude_municipalities] using excluding_beijing.doc, replace tstat bdec(4) tdec(4) keep(GB MAC firm_size TOP1 Indep Board Dual Opinion) addtext(Year, YES, Province, YES, Industry, YES, Year*Province, YES, Year*Industry, YES)
 restore
+*------------------------------------------------------------------------------*
+* 5.limit the sample date from year2012 to year 2019 for robustness checks
+
+reg GB MAC firm_size TOP1 Indep Board Dual Opinion ///
+    if inrange(year, 2012, 2019), r
+est store a1_firmsize
+
+reghdfe GB MAC firm_size TOP1 Indep Board Dual Opinion ///
+    if inrange(year, 2012, 2019), ///
+    absorb(year province_num industry_num) vce(cluster id)
+est store a2_firmsize
+
+reghdfe GB MAC firm_size TOP1 Indep Board Dual Opinion ///
+    if inrange(year, 2012, 2019), ///
+    absorb(year province_num industry_num year#industry_num) vce(cluster id)
+est store a3_firmsize
+
+reghdfe GB MAC firm_size TOP1 Indep Board Dual Opinion ///
+    if inrange(year, 2012, 2019), ///
+    absorb(year province_num industry_num year#province_num year#industry_num) vce(cluster id)
+est store a4_firmsize
+
+outreg2 [a1_firmsize a2_firmsize a3_firmsize a4_firmsize] using baseline_regression_20122019.doc, replace ///
+    tstat bdec(4) tdec(4) ///
+    keep(GB MAC firm_size TOP1 Indep Board Dual Opinion) ///
+    addtext(Year FE, YES, Province FE, YES, Industry FE, YES, Year*Province FE, YES, Year*Industry FE, YES)
 *------------------------------------------------------------------------------*
 
 *********************************Part VI: Addressing Endogeneity***************
@@ -246,7 +232,7 @@ outreg2 [first second] using IV_results.doc, ///
 *------------------------------------------------------------------------------
 *------------------------------------------------------------------------------*
 *********************************Part VII: Heterogeneity Analysis***************
-*异质性 
+*Heterogeneity analysis
 *1. by ownership
 reghdfe GB MAC firm_size TOP1 Indep Board Dual Opinion if SOE==1,absorb(year province_num industry_num year#province_num year#industry_num) vce(cluster id)
 est store d1
@@ -271,13 +257,62 @@ est store e2
 outreg2 [e1 e2] using pollution.doc,replace tstat  bdec(4) tdec(4) keep(GB MAC firm_size TOP1 Indep Board Dual Opinion) addtext(Year, YES, Province, YES, Industry, YES, Year*Province, YES, Year*Industry, YES)
 *------------------------------------------------------------------------------*
 *3. By Firm Size: Examine differences between large and small firms.
-*用总资产中位数分组，大的为大规模企业，小的为小规模企业
+*Firms are classified into “Large” and “Small” groups based on the sample median of total assets (Size). 
+* Speciafically, firms with Size ≥ median(Size) are defined as “Large Median Total Assets”, 
+* while firms with Size &lt; median(Size) are defined as “Small Median Total Assets”.
+
 egen mid=median(Size)
 reghdfe GB MAC firm_size TOP1 Indep Board Dual Opinion if Size>mid,absorb(year province_num industry_num year#province_num year#industry_num) vce(cluster id)
 est store e3
 reghdfe GB MAC firm_size TOP1 Indep Board Dual Opinion if Size<=mid,absorb(year province_num industry_num year#province_num year#industry_num) vce(cluster id)
 est store e4
 outreg2 [e3 e4] using sizeFirm.doc,replace tstat  bdec(4) tdec(4) keep(GB  MAC firm_size TOP1 Indep Board Dual Opinion) addtext(Year, YES, Province, YES, Industry, YES, Year*Province, YES, Year*Industry, YES)
+
+*------------------------------------------------------------------------------*
+*********************************Plot the Figures*************************************
+*Code for Figure 2 
+coefplot ///
+  (b1, label("Lag 1") keep(L.MAC) rename(L.MAC = "MAC (Lag 1)") mcolor(navy) ciopts(lcolor(navy) recast(rcap))) ///
+  (b2, label("Lag 2") keep(L2.MAC) rename(L2.MAC = "MAC (Lag 2)") mcolor(maroon) ciopts(lcolor(maroon) recast(rcap))) ///
+  (b3, label("Lag 3") keep(L3.MAC) rename(L3.MAC = "MAC (Lag 3)") mcolor(forest_green) ciopts(lcolor(forest_green) recast(rcap))) ///
+  (b4, label("Excl. 2016") keep(MAC) rename(MAC = "MAC (Excl. 2016)") mcolor(purple) ciopts(lcolor(purple) recast(rcap))) ///
+  (exclude_municipalities, label("Excl. Municipalities") keep(MAC) rename(MAC = "MAC (Excl. Municipalities)") mcolor(teal) ciopts(lcolor(teal) recast(rcap))) ///
+  (coastal, label("Coastal") keep(MFC) rename(MAC = "Coastal Provinces") mcolor(dkorange) ciopts(lcolor(dkorange) recast(rcap))) ///
+  (non_coastal, label("Non-coastal") keep(MAC) rename(MAC = "Non-coastal Provinces") mcolor(gs10) ciopts(lcolor(gs10) recast(rcap))) ///
+  , ///
+  horizontal ///
+  xline(0, lcolor(gs8)) ///
+  msymbol(D) ///
+  msize(small) ///
+  mlabel format(%9.4f) mlabposition(12) mlabgap(*1.5) mlabsize(vsmall) ///
+  xlabel(-.04(.01).01, format(%9.3f) labsize(vsmall)) ///
+  ylabel(, labsize(small)) ///
+  grid(none) ///
+  scheme(s2color) ///
+  ytitle("") ///
+  title("Combined Robustness Checks (95% Confidence Intervals)", size(small)) ///
+  note("Non-coastal models were only statistically significant with 90% CIs.", size(vsmall)) ///
+  legend(size(vsmall) position(7) ring(1) col(2)) ///
+  plotregion(margin(small) fcolor(white)) ///
+  graphregion(margin(small) fcolor(white))
+graph export "Combined_Robustness_Corrected.png", replace width(3200) height(2000)
+
+*Code for Figure 3 
+coefplot ///
+    (d1, label("State-Owned") msymbol(O) mcolor(navy) ciopts(color(navy))) ///
+    (d2, label("Private Firms") msymbol(D) mcolor(maroon) ciopts(color(maroon))) ///
+    (e1, label("Heavily Polluting") msymbol(T) mcolor(forest_green) ciopts(color(forest_green))) ///
+    (e2, label("non-polluting") msymbol(S) mcolor(dkorange) ciopts(color(dkorange))) ///
+    (e3, label("Large Median Total Assets") msymbol(+) mcolor(purple) ciopts(color(purple))) ///
+    (e4, label("Small Median Total Assets") msymbol(X) mcolor(teal) ciopts(color(teal))), ///
+    keep(MFC) xline(0) ///
+    ytitle("") rename(MAC = "MAC") ///
+    xtitle("Coefficient Estimate with 95% Confidence Interval") ///
+    title("Heterogeneity Analysis") ///
+    subtitle("Across Different Firm Characteristics") ///
+    mlabel mlabformat(%9.4f) mlabposition(12) mlabgap(*1.5) ///
+    grid(none) scheme(s2mono) graphregion(color(white)) plotregion(color(white))
+graph export "MAC_heterogeneity_july2025.png", replace width(3000)
 
 
 
